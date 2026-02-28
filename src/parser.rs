@@ -21,11 +21,34 @@ impl ParsedGemfileLock {
             warnings: Vec::new(),
         }
     }
+
+    pub fn top_level_dependency_views(
+        &self,
+    ) -> impl Iterator<Item = TopLevelDependencyView<'_>> + '_ {
+        let locked_specs = &self.locked_specs;
+
+        self.top_level_dependencies
+            .iter()
+            .map(move |(name, dependency)| TopLevelDependencyView {
+                name: name.as_str(),
+                raw_requirement: dependency.raw_requirement.as_deref(),
+                resolved_version: locked_specs
+                    .get(name)
+                    .map(|spec| spec.version.as_str()),
+            })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TopLevelDependency {
     pub raw_requirement: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TopLevelDependencyView<'a> {
+    pub name: &'a str,
+    pub raw_requirement: Option<&'a str>,
+    pub resolved_version: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

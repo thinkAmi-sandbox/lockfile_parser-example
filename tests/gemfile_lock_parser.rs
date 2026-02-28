@@ -103,6 +103,25 @@ BUNDLED WITH
 }
 
 #[test]
+fn トップレベル依存を解決済みバージョン付きで参照できる() {
+    let parsed = parse(SAMPLE_LOCKFILE).expect("sample lockfile should parse");
+
+    let rails = parsed
+        .top_level_dependency_views()
+        .find(|dependency| dependency.name == "rails")
+        .expect("rails should be included");
+    assert_eq!(rails.raw_requirement, Some("~> 6.1.4"));
+    assert_eq!(rails.resolved_version, Some("6.1.4"));
+
+    let tzinfo_data = parsed
+        .top_level_dependency_views()
+        .find(|dependency| dependency.name == "tzinfo-data")
+        .expect("tzinfo-data should be included");
+    assert_eq!(tzinfo_data.raw_requirement, None);
+    assert_eq!(tzinfo_data.resolved_version, None);
+}
+
+#[test]
 fn 未知のトップレベルセクションでwarningを返す() {
     let input = r#"CUSTOM SOURCE
   cache: vendor/cache
