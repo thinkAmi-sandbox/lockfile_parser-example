@@ -13,6 +13,10 @@ use serde::Serialize;
 pub fn run() -> ExitCode {
     match try_run() {
         Ok(()) => ExitCode::SUCCESS,
+        Err(CliFailure::TextParse(error)) => {
+            eprintln!("{}", format_parse_error_message(&error));
+            ExitCode::from(1)
+        }
         Err(CliFailure::Io(error)) => {
             eprintln!("io_error: {error}");
             ExitCode::from(1)
@@ -26,23 +30,51 @@ pub fn run() -> ExitCode {
 
 fn try_run() -> Result<(), CliFailure> {
     let matches = build_command().get_matches();
+    let format = parse_output_format(&matches);
     let source = matches
         .get_one::<String>("source")
         .expect("required by clap");
     let input = fs::read_to_string(source).map_err(CliFailure::Io)?;
-    let response = map_parse_result(parse(&input));
-    print_json(&response)
+    let parse_result = parse(&input);
+
+    match format {
+        OutputFormat::Json => {
+            let response = map_parse_result(parse_result);
+            print_json(&response)
+        }
+        OutputFormat::Text => print_text(parse_result),
+    }
 }
 
 fn build_command() -> Command {
     Command::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .arg(
+            Arg::new("format")
+                .long("format")
+                .value_name("FORMAT")
+                .help("Output format")
+                .value_parser(["json", "text"])
+                .default_value("json"),
+        )
+        .arg(
             Arg::new("source")
                 .value_name("SOURCE")
                 .help("Path to Gemfile.lock")
                 .required(true),
         )
+}
+
+fn parse_output_format(matches: &clap::ArgMatches) -> OutputFormat {
+    match matches
+        .get_one::<String>("format")
+        .map(String::as_str)
+        .expect("default by clap")
+    {
+        "json" => OutputFormat::Json,
+        "text" => OutputFormat::Text,
+        _ => unreachable!("value_parser limits format values"),
+    }
 }
 
 fn print_json(response: &ParseResultEnvelope) -> Result<(), CliFailure> {
@@ -54,6 +86,62 @@ fn print_json(response: &ParseResultEnvelope) -> Result<(), CliFailure> {
         .map_err(CliFailure::Io)?;
     stdout.write_all(b"\n").map_err(CliFailure::Io)?;
     stdout.flush().map_err(CliFailure::Io)
+}
+
+fn print_text(result: Result<ParsedGemfileLock, ParseError>) -> Result<(), CliFailure> {
+    match result {
+        Ok(parsed) => {
+            print_text_output(&parsed)?;
+            print_text_warnings(&parsed.warnings)
+        }
+        Err(error) => Err(CliFailure::TextParse(error)),
+    }
+}
+
+fn print_text_output(parsed: &ParsedGemfileLock) -> Result<(), CliFailure> {
+    let mut entries = parsed
+        .top_level_dependency_views()
+        .map(|dependency| {
+            (
+                dependency.name.to_string(),
+                dependency.resolved_version.map(str::to_string),
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut payload = String::new();
+    let mut stdout = io::stdout().lock();
+
+    entries.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+
+    for (name, resolved_version) in entries {
+        payload.push_str(&name);
+        payload.push(' ');
+        payload.push('[');
+        if let Some(resolved_version) = resolved_version {
+            payload.push_str(&resolved_version);
+        }
+        payload.push(']');
+        payload.push('\n');
+    }
+
+    stdout
+        .write_all(payload.as_bytes())
+        .map_err(CliFailure::Io)?;
+    stdout.flush().map_err(CliFailure::Io)
+}
+
+fn print_text_warnings(warnings: &[WarningDiagnostic]) -> Result<(), CliFailure> {
+    let mut stderr = io::stderr().lock();
+
+    for warning in warnings {
+        let message = format_warning_message(warning);
+        stderr
+            .write_all(message.as_bytes())
+            .map_err(CliFailure::Io)?;
+        stderr.write_all(b"\n").map_err(CliFailure::Io)?;
+    }
+
+    stderr.flush().map_err(CliFailure::Io)
 }
 
 fn map_parse_result(result: Result<ParsedGemfileLock, ParseError>) -> ParseResultEnvelope {
@@ -127,6 +215,17 @@ fn map_warning(warning: &WarningDiagnostic) -> WarningDto {
     }
 }
 
+fn format_warning_message(warning: &WarningDiagnostic) -> String {
+    let section = map_warning_section(&warning.section);
+
+    format!(
+        "warning: code={} line={} {}",
+        warning_code_text(warning.code),
+        warning.line,
+        format_section_text(&section),
+    )
+}
+
 fn map_parse_error(error: ParseError) -> ParseErrorDto {
     let section = map_parse_error_section(&error);
 
@@ -138,11 +237,30 @@ fn map_parse_error(error: ParseError) -> ParseErrorDto {
     }
 }
 
+fn format_parse_error_message(error: &ParseError) -> String {
+    let section = map_parse_error_section(error);
+
+    format!(
+        "parse error: code={} line={} {}",
+        parse_error_code_text(error.code),
+        error.line,
+        format_section_text(&section),
+    )
+}
+
 fn map_warning_code(code: WarningDiagnosticCode) -> WarningCode {
     match code {
         WarningDiagnosticCode::IgnoredSection => WarningCode::IgnoredSection,
         WarningDiagnosticCode::IncompleteOptionalSection => WarningCode::IncompleteOptionalSection,
         WarningDiagnosticCode::DuplicateOptionalSection => WarningCode::DuplicateOptionalSection,
+    }
+}
+
+fn warning_code_text(code: WarningDiagnosticCode) -> &'static str {
+    match code {
+        WarningDiagnosticCode::IgnoredSection => "ignored_section",
+        WarningDiagnosticCode::IncompleteOptionalSection => "incomplete_optional_section",
+        WarningDiagnosticCode::DuplicateOptionalSection => "duplicate_optional_section",
     }
 }
 
@@ -158,6 +276,19 @@ fn map_parse_error_code(code: ParseErrorCode) -> ParseErrorCodeValue {
         ParseErrorCode::UnsupportedResolvedSource => ParseErrorCodeValue::UnsupportedResolvedSource,
         ParseErrorCode::DuplicateEntry => ParseErrorCodeValue::DuplicateEntry,
         ParseErrorCode::InternalStateViolation => ParseErrorCodeValue::InternalStateViolation,
+    }
+}
+
+fn parse_error_code_text(code: ParseErrorCode) -> &'static str {
+    match code {
+        ParseErrorCode::MissingGemSection => "missing_gem_section",
+        ParseErrorCode::MissingSpecsSubsection => "missing_specs_subsection",
+        ParseErrorCode::MissingDependenciesSection => "missing_dependencies_section",
+        ParseErrorCode::InvalidEntry => "invalid_entry",
+        ParseErrorCode::UnresolvedDependency => "unresolved_dependency",
+        ParseErrorCode::UnsupportedResolvedSource => "unsupported_resolved_source",
+        ParseErrorCode::DuplicateEntry => "duplicate_entry",
+        ParseErrorCode::InternalStateViolation => "internal_state_violation",
     }
 }
 
@@ -210,9 +341,32 @@ fn map_standard_section(section: &Section) -> SectionRefDto {
     }
 }
 
+fn format_section_text(section: &SectionRefDto) -> String {
+    format!("section={}", section_kind_text(&section.kind))
+}
+
+fn section_kind_text(kind: &SectionKind) -> &'static str {
+    match kind {
+        SectionKind::Gem => "gem",
+        SectionKind::GemSpecs => "gem_specs",
+        SectionKind::Dependencies => "dependencies",
+        SectionKind::Platforms => "platforms",
+        SectionKind::RubyVersion => "ruby_version",
+        SectionKind::BundledWith => "bundled_with",
+        SectionKind::Other => "other",
+        SectionKind::Eof => "eof",
+    }
+}
+
 enum CliFailure {
+    TextParse(ParseError),
     Io(io::Error),
     Internal,
+}
+
+enum OutputFormat {
+    Json,
+    Text,
 }
 
 #[derive(Debug, Serialize)]
