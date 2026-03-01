@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lockfile_parser parse-result JSON",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "data", "warnings", "error"],
+  "properties": {
+    "status": {
+      "enum": ["ok", "parse_error"]
+    },
+    "data": {},
+    "warnings": {
+      "type": "array"
+    },
+    "error": {}
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "status": {
+          "const": "ok"
+        },
+        "data": {
+          "$ref": "#/$defs/parsedResult"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/warning"
+          }
+        },
+        "error": {
+          "type": "null"
+        }
+      }
+    },
+    {
+      "properties": {
+        "status": {
+          "const": "parse_error"
+        },
+        "data": {
+          "type": "null"
+        },
+        "warnings": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "error": {
+          "$ref": "#/$defs/parseError"
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "parsedResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "top_level_dependencies",
+        "locked_specs",
+        "platforms",
+        "ruby_version",
+        "bundler_version"
+      ],
+      "properties": {
+        "top_level_dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/topLevelDependencyView"
+          }
+        },
+        "locked_specs": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/lockedSpec"
+          }
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ruby_version": {
+          "type": ["string", "null"]
+        },
+        "bundler_version": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "topLevelDependencyView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "raw_requirement", "resolved_version"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "raw_requirement": {
+          "type": ["string", "null"]
+        },
+        "resolved_version": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "lockedSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "dependencies"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "warning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "line", "section", "raw_line"],
+      "properties": {
+        "code": {
+          "enum": [
+            "ignored_section",
+            "incomplete_optional_section",
+            "duplicate_optional_section"
+          ]
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "section": {
+          "$ref": "#/$defs/warningSectionRef"
+        },
+        "raw_line": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "parseError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "line", "section", "raw_line"],
+      "properties": {
+        "code": {
+          "enum": [
+            "missing_gem_section",
+            "missing_specs_subsection",
+            "missing_dependencies_section",
+            "invalid_entry",
+            "unresolved_dependency",
+            "unsupported_resolved_source",
+            "duplicate_entry",
+            "internal_state_violation"
+          ]
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "section": {},
+        "raw_line": {}
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "section": {
+              "$ref": "#/$defs/eofSectionRef"
+            },
+            "raw_line": {
+              "const": ""
+            }
+          }
+        },
+        {
+          "properties": {
+            "section": {
+              "$ref": "#/$defs/nonEofSectionRef"
+            },
+            "raw_line": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "warningSectionRef": {
+      "$ref": "#/$defs/nonEofSectionRef"
+    },
+    "nonEofSectionRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "enum": [
+                "gem",
+                "gem_specs",
+                "dependencies",
+                "platforms",
+                "ruby_version",
+                "bundled_with"
+              ]
+            },
+            "name": {
+              "type": "null"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": {
+              "const": "other"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "eofSectionRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name"],
+      "properties": {
+        "kind": {
+          "const": "eof"
+        },
+        "name": {
+          "type": "null"
+        }
+      }
+    }
+  }
+}

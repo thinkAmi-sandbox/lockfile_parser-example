@@ -32,9 +32,7 @@ impl ParsedGemfileLock {
             .map(move |(name, dependency)| TopLevelDependencyView {
                 name: name.as_str(),
                 raw_requirement: dependency.raw_requirement.as_deref(),
-                resolved_version: locked_specs
-                    .get(name)
-                    .map(|spec| spec.version.as_str()),
+                resolved_version: locked_specs.get(name).map(|spec| spec.version.as_str()),
             })
     }
 }

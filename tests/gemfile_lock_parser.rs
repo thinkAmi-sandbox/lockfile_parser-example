@@ -1,6 +1,4 @@
-use lockfile_parser::{
-    parse, ParseErrorCode, Section, WarningDiagnosticCode,
-};
+use lockfile_parser::{parse, ParseErrorCode, Section, WarningDiagnosticCode};
 
 const SAMPLE_LOCKFILE: &str =
     include_str!("../examples/rails_relying_party_of_backend/Gemfile.lock");
@@ -37,14 +35,12 @@ fn サンプルlockfileを構造化結果に変換できる() {
             .map(|spec| spec.version.as_str()),
         Some("6.1.4")
     );
-    assert!(
-        parsed
-            .locked_specs
-            .get("rails")
-            .expect("rails should be parsed")
-            .dependencies
-            .contains(&"activerecord".to_string())
-    );
+    assert!(parsed
+        .locked_specs
+        .get("rails")
+        .expect("rails should be parsed")
+        .dependencies
+        .contains(&"activerecord".to_string()));
     assert!(!parsed.locked_specs.contains_key("bundler"));
     assert!(!parsed.locked_specs.contains_key("tzinfo-data"));
     assert_eq!(parsed.platforms, vec!["x86_64-darwin-19".to_string()]);
@@ -84,9 +80,15 @@ BUNDLED WITH
     assert_eq!(parsed.ruby_version, None);
     assert_eq!(parsed.bundler_version.as_deref(), Some("2.5.0"));
     assert_eq!(parsed.warnings.len(), 3);
-    assert_eq!(parsed.warnings[0].code, WarningDiagnosticCode::IgnoredSection);
+    assert_eq!(
+        parsed.warnings[0].code,
+        WarningDiagnosticCode::IgnoredSection
+    );
     assert_eq!(parsed.warnings[0].line, 1);
-    assert_eq!(parsed.warnings[0].section, Section::Other("GIT".to_string()));
+    assert_eq!(
+        parsed.warnings[0].section,
+        Section::Other("GIT".to_string())
+    );
     assert_eq!(
         parsed.warnings[1].code,
         WarningDiagnosticCode::DuplicateOptionalSection
@@ -138,7 +140,10 @@ DEPENDENCIES
     let parsed = parse(input).expect("unknown top-level sections should not be fatal");
 
     assert_eq!(parsed.warnings.len(), 1);
-    assert_eq!(parsed.warnings[0].code, WarningDiagnosticCode::IgnoredSection);
+    assert_eq!(
+        parsed.warnings[0].code,
+        WarningDiagnosticCode::IgnoredSection
+    );
     assert_eq!(parsed.warnings[0].line, 1);
     assert_eq!(
         parsed.warnings[0].section,
@@ -189,10 +194,7 @@ BUNDLED WITH
     );
     assert_eq!(parsed.warnings[1].line, 13);
     assert_eq!(parsed.warnings[1].section, Section::RubyVersion);
-    assert_eq!(
-        parsed.warnings[1].raw_line.as_deref(),
-        Some("  ruby 3.2.2")
-    );
+    assert_eq!(parsed.warnings[1].raw_line.as_deref(), Some("  ruby 3.2.2"));
     assert_eq!(
         parsed.warnings[2].code,
         WarningDiagnosticCode::IncompleteOptionalSection
@@ -254,20 +256,24 @@ fn eofで必須セクション不足の位置情報付きエラーを返す() {
     assert_eq!(missing_gem.section, Section::Other("EOF".to_string()));
     assert_eq!(missing_gem.raw_line, "");
 
-    let missing_specs =
-        parse("GEM\n  remote: https://rubygems.org/\n\nDEPENDENCIES\n").expect_err("missing specs should fail");
+    let missing_specs = parse("GEM\n  remote: https://rubygems.org/\n\nDEPENDENCIES\n")
+        .expect_err("missing specs should fail");
     assert_eq!(missing_specs.code, ParseErrorCode::MissingSpecsSubsection);
     assert_eq!(missing_specs.line, 5);
     assert_eq!(missing_specs.section, Section::Other("EOF".to_string()));
     assert_eq!(missing_specs.raw_line, "");
 
     let missing_dependencies =
-        parse("GEM\n  remote: https://rubygems.org/\n  specs:\n    alpha (1.0.0)\n").expect_err("missing dependencies should fail");
+        parse("GEM\n  remote: https://rubygems.org/\n  specs:\n    alpha (1.0.0)\n")
+            .expect_err("missing dependencies should fail");
     assert_eq!(
         missing_dependencies.code,
         ParseErrorCode::MissingDependenciesSection
     );
     assert_eq!(missing_dependencies.line, 5);
-    assert_eq!(missing_dependencies.section, Section::Other("EOF".to_string()));
+    assert_eq!(
+        missing_dependencies.section,
+        Section::Other("EOF".to_string())
+    );
     assert_eq!(missing_dependencies.raw_line, "");
 }
